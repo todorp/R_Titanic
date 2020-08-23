@@ -163,6 +163,8 @@ lapply(training, class)
 
 # training[, - which( names(training) %in% c("Survived"))]
 
+outcomeTest <- testing$Survived
+
 library(xgboost)
 
 dtrain <- xgb.DMatrix( data = as.matrix( training[, - which( names(training) %in% c("Survived"))] ), label = as.matrix( training$Survived) )

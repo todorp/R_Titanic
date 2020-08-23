@@ -19,6 +19,7 @@ errors(outcomePrediction)
 plotROC(liquidSVM.model ,testing)
 
 
+# Accuracy   ----
 
 if(length(outcomePrediction) != length(outcomeTest)) print("different lenghts")
 if(!identical(levels(outcomePrediction),levels(outcomeTest))) print("not identical levels")
@@ -28,7 +29,6 @@ if(!identical(levels(outcomePrediction),levels(outcomeTest))) print("not identic
 (cmf <- as.list( c(cm[c("overall","byClass")], recursive = TRUE) ))
 
 
-# Accuracy   ----
 
 
 #view variable importance plot
