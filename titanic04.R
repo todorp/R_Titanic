@@ -10,6 +10,7 @@ library(reshape)
 library(caret)
 require( gtools)
 library(xgboost)
+
 # ETL  ----
 
 trainData <- read.csv("train.csv", stringsAsFactors =  F)
@@ -23,7 +24,7 @@ lapply(rawData, class)
 # Data Cleaning   ----
 
 allData = rawData
-allData[ allData == "" ] <- NA
+allData[ trimws(allData) == "" ] <- NA
 
 allData$Fare <- ifelse( allData$Fare == 0, NA, allData$Fare)
 
@@ -139,8 +140,8 @@ lapply(dummyVarData,  class)
 
 # automatic imputation   ----
 
-#processImpute     <- preProcess( dummyVarData, method = c( "center",  "nzv",  "scale", "knnImpute"))
-processImpute     <- preProcess( dummyVarData, method = c( "bagImpute"))
+processImpute     <- preProcess( dummyVarData, method = c( "center",  "nzv",  "scale", "knnImpute"))
+#processImpute     <- preProcess( dummyVarData, method = c("center",  "nzv",  "scale",  "bagImpute"))
 #processImpute     <- preProcess( dummyVarData, method = "medianImpute")
 
 imputeData        <- as.data.frame( cbind( Survived = slimData$Survived, predict( processImpute, dummyVarData) ) )
@@ -178,7 +179,7 @@ param <-
     objective = "binary:logistic",
     eta = 0.1,
     gamma = 0,
-    max_depth = 12,
+    max_depth = 15,
     min_child_weight = 1.05,
     subsample = 0.7,
     colsample_bytree = 0.5,
@@ -190,7 +191,7 @@ param <-
     tree_method = 'hist'
   )
 
-# param <- xdbGridRet$myParams
+
 set.seed(param$myParams$mySeed)
 
 (xgbcv <- xgb.cv( data = dtrain
@@ -220,7 +221,7 @@ system.time(xgb1 <- xgb.train(
 
 xgbpred <- predict (xgb1,wl$test)
 xgbpred <- as.integer(  ifelse (xgbpred > 0.5,1,0) )
-xgbpred <- as.factor(xgbpred)
+xgbpred <- as.factor(xgbpred )
 
 xgblabel <- getinfo( wl$test, "label")
 xgblabel <- as.factor( xgblabel)
