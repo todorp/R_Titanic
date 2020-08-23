@@ -2,19 +2,19 @@
 
 rm(list = ls())
 gc(reset = TRUE)
-setwd("D:\\Dropbox\\Eclipse\\R\\caret\\")
-source("startCluster.R")
 
-setwd("D:\\Dropbox\\Eclipse\\R\\Titanic\\")
+source("D:\\Dropbox\\Eclipse\\R\\libTests\\doParallel\\startCluster.R")
+
+
 library(reshape)
 library(caret)
 require( gtools)
-library(xgboost)
+
 
 # ETL  ----
 
-trainData <- read.csv("train.csv", stringsAsFactors =  F)
-submitData <- read.csv("test.csv", stringsAsFactors =  F)
+trainData <- read.csv("D:\\Dropbox\\Eclipse\\R\\Titanic\\train.csv", stringsAsFactors =  F)
+submitData <- read.csv("D:\\Dropbox\\Eclipse\\R\\Titanic\\test.csv", stringsAsFactors =  F)
 submitData$Survived <- NA
 
 rawData<-rbind(trainData, submitData) # Merge data to simplify preprocessing
@@ -24,7 +24,7 @@ lapply(rawData, class)
 # Data Cleaning   ----
 
 allData = rawData
-allData[ trimws(allData) == "" ] <- NA
+allData[ allData == "" ] <- NA
 
 allData$Fare <- ifelse( allData$Fare == 0, NA, allData$Fare)
 
@@ -126,7 +126,7 @@ features <- c( "Survived", "Pclass", "Sex", "Age", "SibSp",
 myFormula <- as.formula( Survived ~ . )
 
 slimData <- as.data.frame( allData[, features] )
-# slimData <- slimData
+
 str(slimData)
 
 # dumming vars   ----
@@ -140,7 +140,7 @@ lapply(dummyVarData,  class)
 
 # automatic imputation   ----
 
-processImpute     <- preProcess( dummyVarData, method = c( "center",  "nzv",  "scale", "knnImpute"))
+processImpute     <- preProcess( dummyVarData, method = c( "center",  "nzv",  "scale", "knnImpute") )
 #processImpute     <- preProcess( dummyVarData, method = c("center",  "nzv",  "scale",  "bagImpute"))
 #processImpute     <- preProcess( dummyVarData, method = "medianImpute")
 
@@ -163,6 +163,7 @@ lapply(training, class)
 
 # training[, - which( names(training) %in% c("Survived"))]
 
+library(xgboost)
 
 dtrain <- xgb.DMatrix( data = as.matrix( training[, - which( names(training) %in% c("Survived"))] ), label = as.matrix( training$Survived) )
 dtest <- xgb.DMatrix( data = as.matrix( testing[, - which( names(testing) %in% c("Survived"))] ), label = as.matrix( testing$Survived) )
@@ -173,87 +174,3 @@ wl <- list(train = dtrain, test = dtest)
 getinfo( wl$test, "label")
 
 
-param <-
-  list(
-    booster = "gbtree",
-    objective = "binary:logistic",
-    eta = 0.1,
-    gamma = 0,
-    max_depth = 15,
-    min_child_weight = 1.05,
-    subsample = 0.7,
-    colsample_bytree = 0.5,
-    nthread = 7,
-    nrounds = 150,
-    mySeed  = 1234,
-    gpu_id  = 0,
-    # tree_method = 'gpu_hist'
-    tree_method = 'hist'
-  )
-
-
-set.seed(param$myParams$mySeed)
-
-(xgbcv <- xgb.cv( data = dtrain
-                  , params = param
-                  , nrounds = param$nrounds
-                  , nfold = 10
-                  , missing = NA
-                  , metrics = list( "error") # , "auc", "error")
-                  , showsd = T
-                  , stratified = T
-                  , print_every_n = 10
-                  , early_stopping_rounds = param$nrounds
-                  , maximize = F))
-
-
-param$nrounds <- xgbcv$best_iteration
-set.seed(param$myParams$mySeed)
-
-system.time(xgb1 <- xgb.train(
-  params    = param,
-  data      = dtrain,
-  label     = getinfo( wl$test, "label"),
-  watchlist = wl,
-  nrounds   = xgbcv$best_iteration,
-  metrics = list( "error" ), #, "auc", "error"),
-  verbose   = 0))
-
-xgbpred <- predict (xgb1,wl$test)
-xgbpred <- as.integer(  ifelse (xgbpred > 0.5,1,0) )
-xgbpred <- as.factor(xgbpred )
-
-xgblabel <- getinfo( wl$test, "label")
-xgblabel <- as.factor( xgblabel)
-
-if(length(xgbpred) != length(xgblabel)) print("different lenghts")
-if(!identical(levels(xgbpred),levels(xgblabel))) print("different lenghts")
-
-(cm <- confusionMatrix ( data = xgbpred, reference = xgblabel ))
-
-class(cm)
-(cmf <- as.list( c(cm[c("overall","byClass")], recursive = TRUE) ))
-
-
-#Accuracy
-
-xgb1 <- xdbGridRet$xgbModel
-
-#view variable importance plot
-( mat <- xgb.importance (model = xgb1))
-xgb.plot.importance (importance_matrix = mat[1:20])
-
-# prepare submition
-
-(submitData$predictedSurvived <- predict(xgb1, dSubmit))
-
-
-(submitData$PassengerId <- as.numeric(rownames(submitData)))
-(submitData$predictedSurvived <- ifelse( submitData$predictedSurvived > 0.5, 1,0))
-
-
-print(data.frame( submitData$PassengerId, submitData$predictedSurvived ))
-
-write.csv( data.frame(PassengerId = submitData$PassengerId, Survived = submitData$predictedSurvived)
-           , file = "TitanicSubmission.csv"
-           , row.names=FALSE, quote=FALSE)
