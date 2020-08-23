@@ -8,31 +8,30 @@ library(liquidSVM)
 
 
 
-model <- liquidSVM::svm(myFormula, training, GPUs=1)
+liquidSVM.model <- liquidSVM::svm(myFormula, training, max_gamma=25)
 
-prediction <- liquidSVM::test(model, testing)
-str(prediction)
-summary(prediction)
+#outcomePrediction <- liquidSVM::test(liquidSVM.model, testing)
+outcomePrediction <- predict(liquidSVM.model, testing)
+str(outcomePrediction)
+summary(outcomePrediction)
 
-errors(prediction)
-
-plot(training$X1, training$Y,pch='.', ylim=c(-.2,.8), ylab='', xlab='', axes=F)
-curve(predict(model, x),add=T,col='red')
+errors(outcomePrediction)
+plotROC(liquidSVM.model ,testing)
 
 
-# Multi Class
 
-banana <- liquidData('banana-mc')
-banana
-#> LiquidData "banana-mc" with 4000 train samples and 4000 test samples
-#>   having 3 columns named Y,X1,X2
-#>   target "Y" factor with 4 levels: 1 (1200 samples) 2 (1200 samples) 3 (800 samples) ...
+if(length(outcomePrediction) != length(outcomeTest)) print("different lenghts")
+if(!identical(levels(outcomePrediction),levels(outcomeTest))) print("not identical levels")
 
-model <- liquidSVM::svm(Y~., banana$train, GPUs=1 )
+(cm <- confusionMatrix ( data = outcomePrediction, reference = outcomeTest ))
 
-plot(banana$train$X1, banana$train$X2,pch='o', col=banana$train$Y, ylab='', xlab='', axes=F)
-x <- seq(-1,1,.05)
-z <- matrix(predict(model,expand.grid(x,x)),length(x))
-contour(x,x,z, add=T, levels=1:4,col=1,lwd=4)
+(cmf <- as.list( c(cm[c("overall","byClass")], recursive = TRUE) ))
 
-errors(test(model,banana$test))
+
+# Accuracy   ----
+
+
+#view variable importance plot
+( mat <- xgb.importance (model = liquidSVM))
+xgb.plot.importance (importance_matrix = mat[1:20])
+

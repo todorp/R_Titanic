@@ -41,7 +41,7 @@ set.seed(param$myParams$mySeed)
 param$nrounds <- xgbcv$best_iteration
 set.seed(param$myParams$mySeed)
 
-system.time(xgbModel <- xgb.train(
+system.time(gbtreeModel <- xgb.train(
   params    = param,
   data      = dtrain,
   label     = getinfo( wl$test, "label"),
@@ -50,10 +50,11 @@ system.time(xgbModel <- xgb.train(
   metrics = list( "auc" ), #, "auc", "error"),
   verbose   = 0))
 
-str(xgbModel)
-summary(xgbModel)
+str(gbtreeModel)
+summary(gbtreeModel)
 
-outcomePrediction <- predict (xgbModel,wl$test)
+outcomePrediction <- predict (gbtreeModel,wl$test)
+
 outcomePrediction <- as.factor( as.integer(  ifelse (outcomePrediction > 0.5,1,0) ) )
 outcomeTest <- as.factor(  getinfo( wl$test, "label") )
 
@@ -70,12 +71,12 @@ if(!identical(levels(outcomePrediction),levels(outcomeTest))) print("not identic
 
 
 #view variable importance plot
-( mat <- xgb.importance (model = xgbModel))
+( mat <- xgb.importance (model = gbtreeModel))
 xgb.plot.importance (importance_matrix = mat[1:20])
 
 # prepare submition
 
-(submitData$predictedSurvived <- predict(xgbModel, dSubmit))
+(submitData$predictedSurvived <- predict(gbtreeModel, dSubmit))
 
 
 (submitData$PassengerId <- as.numeric(rownames(submitData)))
