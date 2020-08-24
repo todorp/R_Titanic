@@ -123,13 +123,16 @@ features <- c( "Survived", "Pclass", "Sex", "Age", "SibSp",
                "FamilySize", "deckNum", "numCabins",
                "naCabin" ,        "naAge")
 
-myFormula <- as.formula( Survived ~ . )
+
 
 slimData <- as.data.frame( allData[, features] )
 
 str(slimData)
 
 # dumming vars   ----
+
+slimData$Survived <- as.factor(slimData$Survived)
+myFormula <- as.formula( Survived ~ . )
 
 dummies <- dummyVars( myFormula, data = slimData)
 dummyVarData <- as.data.frame( predict(dummies, newdata = slimData))
@@ -140,11 +143,18 @@ lapply(dummyVarData,  class)
 
 # automatic imputation   ----
 
-processImpute     <- preProcess( dummyVarData, method = c( "center",  "nzv",  "scale", "knnImpute") )
-#processImpute     <- preProcess( dummyVarData, method = c("center",  "nzv",  "scale",  "bagImpute"))
+
+str(dummyVarData)
+
+
+
+# processImpute     <- preProcess( dummyVarData, method = c(  "knnImpute") )
+processImpute     <- preProcess( dummyVarData, method = c("nzv", "scale", "bagImpute"))
 #processImpute     <- preProcess( dummyVarData, method = "medianImpute")
 
-imputeData        <- as.data.frame( cbind( Survived = slimData$Survived, predict( processImpute, dummyVarData) ) )
+#imputeData        <- as.data.frame( cbind( Survived = slimData$Survived, predict( processImpute, dummyVarData) ) )
+imputeData        <- as.data.frame( cbind( Survived = ifelse( slimData$Survived == 1, "y", "N")
+                                           , predict( processImpute, dummyVarData) ) )
 
 lapply(imputeData,  class)
 
@@ -159,7 +169,7 @@ inTrain<-createDataPartition(modelData$Survived, p = 0.8)[[1]]
 (training <- modelData[inTrain,])
 (testing <- modelData[-inTrain,])
 
-lapply(training, class)
+summary(training)
 
 # training[, - which( names(training) %in% c("Survived"))]
 
@@ -174,5 +184,4 @@ dSubmit <- xgb.DMatrix( data = as.matrix( submitData[, - which( names(submitData
 
 wl <- list(train = dtrain, test = dtest)
 getinfo( wl$test, "label")
-
 

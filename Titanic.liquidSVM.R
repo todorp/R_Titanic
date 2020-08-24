@@ -10,10 +10,11 @@ library(liquidSVM)
 
 liquidSVM.model <- liquidSVM::svm(myFormula, training, max_gamma=25)
 
+str(liquidSVM.model)
+summary(liquidSVM.model)
+
 #outcomePrediction <- liquidSVM::test(liquidSVM.model, testing)
 outcomePrediction <- predict(liquidSVM.model, testing)
-str(outcomePrediction)
-summary(outcomePrediction)
 
 errors(outcomePrediction)
 plotROC(liquidSVM.model ,testing)
@@ -29,9 +30,8 @@ if(!identical(levels(outcomePrediction),levels(outcomeTest))) print("not identic
 (cmf <- as.list( c(cm[c("overall","byClass")], recursive = TRUE) ))
 
 
+# variable importance plot
 
-
-#view variable importance plot
-( mat <- xgb.importance (model = liquidSVM))
-xgb.plot.importance (importance_matrix = mat[1:20])
+varImp(liquidSVM.model)
+plot(liquidSVM.model)
 
