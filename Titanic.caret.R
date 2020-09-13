@@ -11,12 +11,13 @@ str(training)
 fitControl <- caret::trainControl(## 10-fold CV
   method = "repeatedcv",
   number = 10,   # partitions
-  repeats = 5, ## repeat ten times
-  index=createResample(training$SurvivedFactor, 10),
+  repeats = 15, ## repeat ten times
+  index=createResample(training$Survived, 10),
   classProbs=TRUE,
   summaryFunction=twoClassSummary,
   verbose = FALSE,
-  allowParallel = TRUE)
+  allowParallel = TRUE
+  , savePredictions = "final")
 
 
 tune.grid <- expand.grid(
@@ -30,7 +31,7 @@ tune.grid <- expand.grid(
                          )
 
 
-set.seed(825)
+set.seed(1111)
 system.time(
   gbmFit1 <- caret::train(
       myFormula,
@@ -53,7 +54,8 @@ plot(varImp(gbmFit1, scale = F))
 
 predValues <- predict(gbmFit1, testing)
 
-confusionMatrix( as.factor(predValues), testing$Survived )$overall[1]
+(cm <- confusionMatrix( as.factor(predValues), testing$Survived ))
+$overall[1]
 
 
 library(pROC)

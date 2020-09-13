@@ -116,10 +116,12 @@ names(allData)
 
 # features to use
 
-features <- c( "Survived", "Pclass", "Sex", "Age", "SibSp",
+features <- c( "Survived", "Pclass"
+               #, "Sex"
+               , "Age", "SibSp",
                "Parch", "Fare", "PricePerPerson", "TicketCount",
                "Embarked",
-               "Title", "FamilyNameCount",
+               "Title", # "FamilyNameCount",
                "FamilySize", "deckNum", "numCabins",
                "naCabin" ,        "naAge")
 
@@ -136,6 +138,7 @@ myFormula <- as.formula( Survived ~ . )
 
 dummies <- dummyVars( myFormula, data = slimData)
 dummyVarData <- as.data.frame( predict(dummies, newdata = slimData))
+
 names(dummyVarData)
 length( names(dummyVarData) )
 
@@ -148,13 +151,14 @@ str(dummyVarData)
 
 
 
-# processImpute     <- preProcess( dummyVarData, method = c(  "knnImpute") )
-processImpute     <- preProcess( dummyVarData, method = c("nzv", "scale", "bagImpute"))
+processImpute     <- preProcess( dummyVarData, method = c( "zv", "center", "scale", "knnImpute" ) )
+# processImpute     <- preProcess( dummyVarData, method = c( "zv", "center", "scale", "bagImpute" ) )
 #processImpute     <- preProcess( dummyVarData, method = "medianImpute")
 
 #imputeData        <- as.data.frame( cbind( Survived = slimData$Survived, predict( processImpute, dummyVarData) ) )
-imputeData        <- as.data.frame( cbind( Survived = ifelse( slimData$Survived == 1, "y", "N")
+imputeData        <- as.data.frame( cbind( Survived = ifelse( slimData$Survived == 1, "Y", "N")
                                            , predict( processImpute, dummyVarData) ) )
+imputeData$Survived <- as.factor(imputeData$Survived)
 
 lapply(imputeData,  class)
 
@@ -162,13 +166,15 @@ lapply(imputeData,  class)
 (submitData <- imputeData[which(is.na(imputeData$Survived)), ])
 
 
-set.seed(1234)
-inTrain<-createDataPartition(modelData$Survived, p = 0.8)[[1]]
+set.seed(111)
+inTrain<-createDataPartition(modelData$Survived, p = 0.9)[[1]]
 
 
 (training <- modelData[inTrain,])
 (testing <- modelData[-inTrain,])
 
+
+training <- modelData
 summary(training)
 
 # training[, - which( names(training) %in% c("Survived"))]

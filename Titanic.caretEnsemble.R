@@ -1,230 +1,95 @@
-## Load cleaned data
-source("D:\\Dropbox\\Eclipse\\R\\Titanic\\titanicETL01.R")
+setwd("D:\\Dropbox\\Eclipse\\R\\Kagle\\Titanic")
 
-library(reshape)
+source("Titanic.ETL.R")
+
+setwd("D:\\Dropbox\\Eclipse\\R\\Kagle\\Titanic")
+
+# Load libraries
+library(mlbench)
 library(caret)
+library(caretEnsemble)
 
 
-system.time(glm.model <- glm( myFormula, data=training, family=binomial(("logit"))))
-summary(glm.model)
-(p <- predict(glm.model, testing))
-p[which(p > 0.5)] <- 'Y'
-p[which(p <= 0.5)] <- 'N'
-p <- as.factor(p)
-class(testing$Survived)
-class(p)
+nrow(training)
+nrow(submitData)
 
-confusionMatrix( as.factor(p), testing$Survived )$overall[1]
+seed <- 222
 
-summary(glm.model)
+# Stacking algorithms
 
-varImp(glm.model)
-plot(varImp(glm.model, scale = F))
+control <- trainControl(
+  method="repeatedcv"
+  , number=10
+  , repeats=20
+  , savePredictions='final'
+  , twoClassSummary
+  , classProbs=TRUE
+  , index=createResample(training$Survived, 20)
+  , allowParallel = TRUE)
 
-(submitData$predictedSurvived <- predict(glm.model, submitData))
+algorithmList <- c('xgbLinear','xgbTree','lda', 'rpart', 'glm', 'knn', 'svmRadial', 'nnet', 'glmStepAIC')
+set.seed(seed)
+modelsList <- caretList(myFormula, data=training, trControl=control, methodList=algorithmList, continue_on_fail = T)
+results <- resamples(modelsList)
+summary(results)
+dotplot(results)
 
-print(data.frame( c(submitData$PassengerId, ifelse(  submitData$predictedSurvived == 'Yes', 1,0))))
+stackModel <- caretEnsemble(modelsList)
+summary(stackModel)
+varImp(greedy_ensemble)
 
-write.csv( data.frame(submitData$PassengerId, ifelse( submitData$predictedSurvived == 'Yes', 1,0)) ,
-           file = "D:\\Dropbox\\Eclipse\\R\\Titanic\\Submission05.csv",
-           row.names=FALSE, quote=FALSE, col.names=c('PassengerId', 'SurvivedFactor'))
+# correlation between results
+modelCor(results)
+splom(results)
 
-# caret train
+# stack using glm
+stackControl <- trainControl(method="repeatedcv", number=10, repeats=10, savePredictions=TRUE, classProbs=TRUE)
 
-fitControl <- caret::trainControl(## 10-fold CV
-  method = "repeatedcv",
-  number = 10,   # partitions
-  repeats = 5, ## repeate ten times
-  index=createResample(training$SurvivedFactor, 10),
-  classProbs=TRUE,
-  summaryFunction=twoClassSummary,
-  # preProcOptions = c(cutoff = 0.97, freqCut = 95/5, uniqueCut = 10),
-  verbose = FALSE,
-  allowParallel = TRUE)
+set.seed(seed)
+stackModel <- caretStack(modelsList, method="glm", metric="Accuracy", trControl=stackControl)
+print(stackModel)
 
-
-tune.grid <- expand.grid(eta = c(0.05, 0.075, 0.1),
-                         nrounds = c(50, 75, 100),
-                         max_depth = 6:8,
-                         min_child_weight = c(2.0, 2.25, 2.5),
-                         colsample_bytree = c(0.3, 0.4, 0.5),
-                         gamma = 0,
-                         subsample = 1)
+# stack using random forest
+set.seed(seed)
+stackModel <- caretStack(modelsList, method="rf", metric="Accuracy", trControl=stackControl)
+print(stackModel)
 
 
-set.seed(825)
-system.time(
-  gbmFit1 <- caret::train(
-      myFormula,
-      data = training,
-      preProcess = c("center", "scale"   , "pca"),
-      method = "glmStepAIC",
-      metric='ROC',
-      trControl = fitControl,
-      verbose = FALSE
-     # , tuneGrid = tune.grid
-  )
-)
-
-summary(gbmFit1)
-
-varImp(gbmFit1)
-plot(varImp(gbmFit1, scale = F))
+# stack using xgbTree
+set.seed(seed)
+stackModel <- caretStack(modelsList, method="xgbTree", metric="Accuracy", trControl=stackControl)
+print(stackModel)
+summary(stackModel)
+dotplot(stackModel)
 
 
-predValues <- predict(gbmFit1, testing)
-# p[which(p > 0.5)] <- 1
-# p[which(p <= 0.5)] <- 0
-
-# class(testing$SurvivedFactor)
-# class(predValues)
-
-confusionMatrix( as.factor(predValues), testing$SurvivedFactor )$overall[1]
-
-
-library(pROC)
-auc <- roc(as.numeric(testing$SurvivedFactor), as.numeric(predValues))
-print(auc$auc)
-
-(testing$predictedSurvived <- predValues)
-
-confusionMatrix( testing$predictedSurvived, testing$SurvivedFactor )$overall[1]
-
-
-(slimData$predictedSurvived <- predict(gbmFit1, slimData))
-
-(submitData <- slimData[which(is.na(slimData$Survived)), ])
-s <- submitData$PassengerId
-(p <- ifelse( submitData$predictedSurvived == 'Yes' , 1,0))
-
-print(data.frame( c(s, p )))
-
-write.csv( data.frame(submitData$PassengerId, ifelse( submitData$predictedSurvived == 'Yes', 1,0)) ,
-           file = "D:\\Dropbox\\Eclipse\\R\\Titanic\\Submission06.csv",
-           row.names=FALSE, quote=FALSE, col.names=c('PassengerId', 'SurvivedFactor'))
+# stack using xgbDART
+set.seed(seed)
+stackModel <- caretStack(modelsList, method="xgbDART", metric="Accuracy", trControl=stackControl)
+print(stackModel)
+summary(stackModel)
+plot(stackModel)
 
 
 
-# ensembles
+pred = predict(stackModel, testing)
+(cm = confusionMatrix(testing$Survived, pred))
+
+# prepare submition
+
+(submitData$predictedSurvived <- predict(stackModel, submitData))
 
 
-fitControl <- trainControl(
-  method='repeatedcv',
-  number=3,
-  repeats=5,
-  savePredictions = 'final',
-  classProbs=TRUE,
-  index=createResample(training$SurvivedFactor, 10),
-  search='grid',
-  summaryFunction=twoClassSummary,
-  verbose = FALSE,
-  allowParallel = TRUE
-)
-
-# (myMethods <- names(getModelInfo()))
-myMethods <- c('glm', 'glmnet', 'rpart' ,'xgbLinear','xgbTree','rf', "nnet", "svmRadial")
-
-myMethods <- c('lmStepAIC', 'glmStepAIC')
-
-library('rpart')
-library('caretEnsemble')
-system.time(model_list <- caretList(
-  myFormula,
-  data=training,
-  metric='ROC',
-  trControl=fitControl,
-  methodList= myMethods,
-  # preProcess = c("center", "scale"),
-  continue_on_fail = TRUE,
-  verbose = FALSE
-))
-
-model_list
+(submitData$PassengerId <- as.numeric(rownames(submitData)))
+(submitData$predictedSurvived <- ifelse( submitData$predictedSurvived == 'Y', 0,1))
 
 
-(predictionClass <- predict(model_list, newdata=testing))
+print(data.frame( submitData$PassengerId, submitData$predictedSurvived ))
 
-modelCor(resamples(model_list))
-
-output = resamples(model_list)
-summary(output)
-dotplot(output)
-
-# Model Correlation
-
-models_results <- resamples(model_list)
-
-modelCor( models_results )
-
-dotplot( models_results )
-
-greedy_ensemble <- caretEnsemble(model_list)
-
-summary(greedy_ensemble)
-plot(varImp(greedy_ensemble, scale = F))
-
-predValues <- predict( greedy_ensemble , newdata=testing )
-ifelse( predValues > 0.5,  'Yes' , 'No' )
-
-
-confusionMatrix( as.factor(predValues), testing$SurvivedFactor )$overall[1]
-
-###################
-
-
-## Control for the train function
-# fitControl <- trainControl(method="cv",
-#                             number=10,
-#                             savePredictions = "final",
-#                             classProbs=TRUE,
-#                             index=createResample(training$SurvivedFactor, times = 15),
-#                             summaryFunction = twoClassSummary,
-#                             verboseIter = FALSE)
+write.csv( data.frame(PassengerId = submitData$PassengerId, Survived = submitData$predictedSurvived)
+           , file = "TitanicSubmission-2020-09-13-21.csv"
+           , row.names=FALSE, quote=FALSE)
 
 
 
-library(pROC)
-library(randomForest)
-library(nnet)
-library(kernlab)
-
-set.seed(100)
-# system.time(model_list <- caretList(myFormula,
-#                         data = training,
-#                         trControl = fitControl,
-#                         metric = "ROC",
-#                         tuneList = list(knnr = caretModelSpec(method = "knn", tuneLength = 3),
-#                                         nnet = caretModelSpec(method = "nnet", tuneLength = 3, trace=FALSE),
-#                                         svmR = caretModelSpec(method = "svmRadial", tuneLength = 3),
-#                                         rdmf = caretModelSpec(method = "rf", tuneLength = 3))))
-#
-# # Model Correlation
-#
-# models_results <- resamples(model_list)
-#
-# modelCor( models_results )
-#
-# dotplot( models_results )
-#
-# greedy_ensemble <- caretEnsemble(model_list)
-#
-#
-# summary(greedy_ensemble)
-#
-# predValues <- predict( greedy_ensemble , newdata=testing )
-# # predict( greedy_ensemble, newdata =testing)
-#
-# summary(greedy_ensemble)
-# varImp(greedy_ensemble)
-# plot(varImp(greedy_ensemble, scale = F))
-
-#   caretStack
-
-
-stack = caretStack(model_list, method="glm", trControl = fitControl)
-summary(stack)
-varImp(stack)
-
-pred = predict(stack, testing)
-cm = confusionMatrix(testing$SurvivedFactor, pred)
-print(cm)
+source("D:\\Dropbox\\Eclipse\\R\\caret\\stopCluster.R")
