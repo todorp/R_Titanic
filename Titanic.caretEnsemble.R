@@ -13,59 +13,141 @@ library(caretEnsemble)
 nrow(training)
 nrow(submitData)
 
-seed <- 222
+numberPartitions <- 4
+crossValidationRepeats <- 500
 
 # Stacking algorithms
 
 control <- trainControl(
-  method="repeatedcv"
-  , number=10
-  , repeats=20
-  , savePredictions='final'
-  , twoClassSummary
-  , classProbs=TRUE
-  , index=createResample(training$Survived, 20)
-  , allowParallel = TRUE)
+  method = "repeatedcv",
+  number = numberPartitions,
+  repeats = crossValidationRepeats,
+  savePredictions = 'final',
+  twoClassSummary,
+  classProbs = TRUE,
+  index = createMultiFolds(training$Survived, numberPartitions, crossValidationRepeats),
+  # index = createResample(y = training$Survived, times = 3),
+  allowParallel = TRUE
+)
 
-algorithmList <- c('xgbLinear','xgbTree','lda', 'rpart', 'glm', 'knn', 'svmRadial', 'nnet', 'glmStepAIC')
+algorithmList <-
+  c('ranger',
+    'xgbTree',
+    'rpart',
+    #"rf",
+    #'glm',
+    #'knn',
+    'svmRadial',
+    'nnet',
+    'glmStepAIC')
 set.seed(seed)
-modelsList <- caretList(myFormula, data=training, trControl=control, methodList=algorithmList, continue_on_fail = T)
-results <- resamples(modelsList)
+
+runTime <- system.time(
+  modelsList <-
+    caretList(
+      myFormula,
+      data = training,
+      trControl = control,
+      methodList = algorithmList,
+      continue_on_fail = T
+    )
+)
+
+library(lubridate)
+lapply(runTime, seconds_to_period)$elapsed
+
+# summary(modelsList)
+# str(modelsList)
+
+(results <- resamples(modelsList))
 summary(results)
 dotplot(results)
 
-stackModel <- caretEnsemble(modelsList)
+bwplot(results)
+
+set.seed(seed)
+system.time(stackModel <- caretEnsemble(modelsList))
 summary(stackModel)
-varImp(greedy_ensemble)
+bwplot(stackModel)
 
 # correlation between results
 modelCor(results)
 splom(results)
 
-# stack using glm
-stackControl <- trainControl(method="repeatedcv", number=10, repeats=10, savePredictions=TRUE, classProbs=TRUE)
+# stackControl for caretStack
+stackControl <-
+  trainControl(
+    method = "repeatedcv",
+    number = numberPartitions,
+    repeats = crossValidationRepeats,
+    index = createMultiFolds(training$Survived, numberPartitions, crossValidationRepeats),
+    savePredictions = TRUE,
+    classProbs = TRUE,
+    allowParallel = TRUE
+  )
+
 
 set.seed(seed)
-stackModel <- caretStack(modelsList, method="glm", metric="Accuracy", trControl=stackControl)
+system.time(
+  stackModel <-
+    caretStack(
+      modelsList,
+      method = "glmStepAIC",
+      metric = "Accuracy",
+      trControl = stackControl
+    )
+)
+print(stackModel)
+
+set.seed(seed)
+system.time(
+  stackModel <-
+    caretStack(
+      modelsList,
+      method = "nnet",
+      metric = "Accuracy",
+      trControl = stackControl
+    )
+)
 print(stackModel)
 
 # stack using random forest
 set.seed(seed)
-stackModel <- caretStack(modelsList, method="rf", metric="Accuracy", trControl=stackControl)
+system.time(
+  stackModel <-
+    caretStack(
+      modelsList,
+      method = "rf",
+      metric = "Accuracy",
+      trControl = stackControl
+    )
+)
 print(stackModel)
 
 
 # stack using xgbTree
 set.seed(seed)
-stackModel <- caretStack(modelsList, method="xgbTree", metric="Accuracy", trControl=stackControl)
+stackModel <-
+  caretStack(modelsList,
+             method = "xgbTree",
+             metric = "Accuracy",
+             trControl = stackControl)
 print(stackModel)
 summary(stackModel)
-dotplot(stackModel)
+plot(stackModel)
 
 
 # stack using xgbDART
 set.seed(seed)
-stackModel <- caretStack(modelsList, method="xgbDART", metric="Accuracy", trControl=stackControl)
+system.time(
+  stackModel <-
+    caretStack(
+      modelsList,
+      method = "xgbDART",
+      metric = "Accuracy",
+      trControl = stackControl
+    )
+)
 print(stackModel)
 summary(stackModel)
 plot(stackModel)
@@ -75,20 +157,27 @@ plot(stackModel)
 pred = predict(stackModel, testing)
 (cm = confusionMatrix(testing$Survived, pred))
 
-# prepare submition
+# prepare submission
 
 (submitData$predictedSurvived <- predict(stackModel, submitData))
 
 
 (submitData$PassengerId <- as.numeric(rownames(submitData)))
-(submitData$predictedSurvived <- ifelse( submitData$predictedSurvived == 'Y', 0,1))
+(submitData$predictedSurvived <-
+    ifelse(submitData$predictedSurvived == 'Y', 1, 0))
 
 
-print(data.frame( submitData$PassengerId, submitData$predictedSurvived ))
+print(data.frame(submitData$PassengerId, submitData$predictedSurvived))
 
-write.csv( data.frame(PassengerId = submitData$PassengerId, Survived = submitData$predictedSurvived)
-           , file = "TitanicSubmission-2020-09-13-21.csv"
-           , row.names=FALSE, quote=FALSE)
+write.csv(
+  data.frame(
+    PassengerId = submitData$PassengerId,
+    Survived = submitData$predictedSurvived
+  ),
+  file = "TitanicSubmission-2020-11-06-22.csv",
+  row.names = FALSE,
+  quote = FALSE
+)
 
 
 
